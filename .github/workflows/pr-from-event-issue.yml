@@ -1,0 +1,66 @@
+name: Create PR from Issue
+on:
+  issues:
+    types: [opened, edited]
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: Issue Number
+        required: true
+
+env:
+  ISSUE_NUMBER: ${{ github.event.issue.number || github.event.inputs.issue }}
+  ISSUE_BRANCH: from-issue/${{ github.event.issue.number || github.event.inputs.issue }}
+
+jobs:
+  create-pr:
+    name: Create PR
+    if: ${{ github.event_name == 'workflow_dispatch' || (!github.event.issue.pull_request && contains(github.event.issue.labels.*.name, '事件')) }}
+    runs-on: ubuntu-latest
+    concurrency: 
+      group: event-issue-${{ github.event.issue.number || github.event.inputs.issue }}
+      cancel-in-progress: true
+    steps:
+      - name: Setup Git User
+        run: |
+          git config --global user.name "${GITHUB_ACTOR}"
+          git config --global user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get -y update
+          sudo apt-get -y install pandoc
+          pip install -r tools/requirements.txt
+
+      - name: Change to Issue Branch
+        run: |
+          if git fetch --unshallow origin ${ISSUE_BRANCH}; then
+            # We have the branch, checkout and do the rebase
+            git checkout -b ${ISSUE_BRANCH} origin/${ISSUE_BRANCH}
+            git rebase main
+          else
+            git checkout -b ${ISSUE_BRANCH}
+          fi
+          
+      - name: Generate Data from Issue
+        run: ./issue-to-data.py ${ISSUE_NUMBER}
+        working-directory: tools
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit Changes
+        run: |
+          git add .
+          git commit -m "[ISSUE-${ISSUE_NUMBER}] Updated from #${ISSUE_NUMBER}"
+
+      - name: Push Changes
+        run: |
+          git push -u origin ${ISSUE_BRANCH} --force
