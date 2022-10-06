@@ -27,8 +27,8 @@ def parse(text):
     doc = pandoc.read(text)
 
     def parse_place(v):
-        province, city = cncities.parse(pandoc.write(v).strip())
-        return {k: v for k, v in {'province': province, 'city': city}.items() if v}
+        province, prefecture = cncities.parse(pandoc.write(v).strip())
+        return {k: v for k, v in {'province': province, 'prefectureecture': prefecture}.items() if v}
 
     def parse_date(key):
         return lambda v: {key: datetime.date.fromisoformat(pandoc.write(v).strip())}
